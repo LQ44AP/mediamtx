@@ -1,0 +1,40 @@
+name: Build for MT7621
+
+on:
+  workflow_dispatch: # 允许手动点击按钮触发编译
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25.7' # 建议使用稳定版本
+
+      - name: Build MediaMTX for MIPSLE
+        run: |
+          # 确保 VERSION 文件存在
+          echo "github-build-$(date +%F)" > VERSION
+          
+          # 尝试下载可能缺失的 npm 依赖资源 (MediaMTX 内部有时会用到)
+          # 但最简单的方法是直接运行 go generate
+          go generate ./...
+
+          # 再次尝试编译
+          env CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat \
+          go build -ldflags "-s -w" -o mediamtx_mipsle .
+
+      - name: Compress with UPX (Optional)
+        run: |
+          sudo apt-get update && sudo apt-get install -y upx
+          upx  -k --best --lzma mediamtx_mipsle
+
+      - name: Upload Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: mediamtx-mt7621-bin
+          path: mediamtx_mipsle
