@@ -50,11 +50,11 @@ func tunnelLabel(t gortsplib.Tunnel) string {
 
 type connParent interface {
 	logger.Writer
-	findSessionByRSessionUnsafe(rsession *gortsplib.ServerSession) *session
+	getSessionByRSessionUnsafe(rsession *gortsplib.ServerSession) *session
 }
 
 type conn struct {
-	isTLS               bool
+	encryption          bool
 	rtspAddress         string
 	authMethods         []rtspauth.VerifyMethod
 	readTimeout         conf.Duration
@@ -86,11 +86,11 @@ func (c *conn) initialize() {
 		RunOnDisconnect:     c.runOnDisconnect,
 		RTSPAddress:         c.rtspAddress,
 		Desc: defs.APIPathReader{
-			Type: func() string {
-				if c.isTLS {
-					return "rtspsConn"
+			Type: func() defs.APIPathReaderType {
+				if c.encryption {
+					return defs.APIPathReaderTypeRTSPSConn
 				}
-				return "rtspConn"
+				return defs.APIPathReaderTypeRTSPConn
 			}(),
 			ID: c.uuid.String(),
 		},
@@ -192,7 +192,7 @@ func (c *conn) onDescribe(ctx *gortsplib.ServerHandlerOnDescribeCtx,
 	}
 
 	var strm *gortsplib.ServerStream
-	if !c.isTLS {
+	if !c.encryption {
 		strm = res.Stream.RTSPStream(c.rserver)
 	} else {
 		strm = res.Stream.RTSPSStream(c.rserver)
@@ -222,18 +222,20 @@ func (c *conn) apiItem() *defs.APIRTSPConn {
 	stats := c.rconn.Stats()
 
 	return &defs.APIRTSPConn{
-		ID:            c.uuid,
-		Created:       c.created,
-		RemoteAddr:    c.remoteAddr().String(),
-		BytesReceived: stats.BytesReceived,
-		BytesSent:     stats.BytesSent,
+		ID:         c.uuid,
+		Created:    c.created,
+		RemoteAddr: c.remoteAddr().String(),
 		Session: func() *uuid.UUID {
-			sx := c.parent.findSessionByRSessionUnsafe(c.rconn.Session())
+			sx := c.parent.getSessionByRSessionUnsafe(c.rconn.Session())
 			if sx != nil {
 				return &sx.uuid
 			}
 			return nil
 		}(),
-		Tunnel: tunnelLabel(c.rconn.Transport().Tunnel),
+		Tunnel:        tunnelLabel(c.rconn.Transport().Tunnel),
+		InboundBytes:  stats.InboundBytes,
+		OutboundBytes: stats.OutboundBytes,
+		BytesReceived: stats.InboundBytes,
+		BytesSent:     stats.OutboundBytes,
 	}
 }

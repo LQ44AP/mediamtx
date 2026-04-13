@@ -17,6 +17,7 @@ import (
 	"github.com/bluenviron/gortsplib/v5/pkg/format/rtpvp9"
 	"github.com/bluenviron/mediacommon/v2/pkg/codecs/g711"
 	"github.com/bluenviron/mediacommon/v2/pkg/codecs/opus"
+	"github.com/bluenviron/mediamtx/internal/formatlabel"
 	"github.com/bluenviron/mediamtx/internal/logger"
 	"github.com/bluenviron/mediamtx/internal/stream"
 	"github.com/bluenviron/mediamtx/internal/unit"
@@ -42,7 +43,9 @@ var errNoSupportedCodecsFrom = errors.New(
 		"AV1, VP9, VP8, H265, H264, Opus, G722, G711, LPCM")
 
 func ptrOf[T any](v T) *T {
-	return &v
+	p := new(T)
+	*p = v
+	return p
 }
 
 func randUint32() (uint32, error) {
@@ -370,7 +373,10 @@ func setupAudioTrack(
 			media,
 			opusFormat,
 			func(u *unit.Unit) error {
+				baseTimestamp := curTimestamp
+
 				for _, orig := range u.RTPPackets {
+					// create a copy of the packet that we can edit freely
 					pkt := &rtp.Packet{
 						Header:  orig.Header,
 						Payload: orig.Payload,
@@ -381,7 +387,7 @@ func setupAudioTrack(
 					pkt.Timestamp = curTimestamp
 					curTimestamp += uint32(opus.PacketDuration2(pkt.Payload))
 
-					ntp := u.NTP.Add(timestampToDuration(int64(pkt.Timestamp-u.RTPPackets[0].Timestamp), 48000))
+					ntp := u.NTP.Add(timestampToDuration(int64(pkt.Timestamp-baseTimestamp), 48000))
 					track.WriteRTPWithNTP(pkt, ntp) //nolint:errcheck
 				}
 
@@ -484,7 +490,10 @@ func setupAudioTrack(
 				media,
 				g711Format,
 				func(u *unit.Unit) error {
+					baseTimestamp := curTimestamp
+
 					for _, orig := range u.RTPPackets {
+						// create a copy of the packet that we can edit freely
 						pkt := &rtp.Packet{
 							Header:  orig.Header,
 							Payload: orig.Payload,
@@ -495,7 +504,7 @@ func setupAudioTrack(
 						pkt.Timestamp = curTimestamp
 						curTimestamp += uint32(len(pkt.Payload)) / uint32(g711Format.ChannelCount)
 
-						ntp := u.NTP.Add(timestampToDuration(int64(pkt.Timestamp-u.RTPPackets[0].Timestamp), 8000))
+						ntp := u.NTP.Add(timestampToDuration(int64(pkt.Timestamp-baseTimestamp), 8000))
 						track.WriteRTPWithNTP(pkt, ntp) //nolint:errcheck
 					}
 
@@ -542,14 +551,15 @@ func setupAudioTrack(
 						return nil //nolint:nilerr
 					}
 
+					baseTimestamp := curTimestamp
+
 					for _, pkt := range packets {
 						// recompute timestamp from scratch.
 						// Chrome requires a precise timestamp that FFmpeg doesn't provide.
 						pkt.Timestamp = curTimestamp
 						curTimestamp += uint32(len(pkt.Payload)) / 2 / uint32(g711Format.ChannelCount)
 
-						ntp := u.NTP.Add(timestampToDuration(int64(pkt.Timestamp-u.RTPPackets[0].Timestamp),
-							g711Format.ClockRate()))
+						ntp := u.NTP.Add(timestampToDuration(int64(pkt.Timestamp-baseTimestamp), g711Format.ClockRate()))
 						track.WriteRTPWithNTP(pkt, ntp) //nolint:errcheck
 					}
 
@@ -616,14 +626,15 @@ func setupAudioTrack(
 					return nil //nolint:nilerr
 				}
 
+				baseTimestamp := curTimestamp
+
 				for _, pkt := range packets {
 					// recompute timestamp from scratch.
 					// Chrome requires a precise timestamp that FFmpeg doesn't provide.
 					pkt.Timestamp = curTimestamp
 					curTimestamp += uint32(len(pkt.Payload)) / 2 / uint32(lpcmFormat.ChannelCount)
 
-					ntp := u.NTP.Add(timestampToDuration(int64(pkt.Timestamp-u.RTPPackets[0].Timestamp),
-						lpcmFormat.ClockRate()))
+					ntp := u.NTP.Add(timestampToDuration(int64(pkt.Timestamp-baseTimestamp), lpcmFormat.ClockRate()))
 					track.WriteRTPWithNTP(pkt, ntp) //nolint:errcheck
 				}
 
@@ -709,7 +720,7 @@ func FromStream(
 	for _, media := range desc.Medias {
 		for _, forma := range media.Formats {
 			if !slices.Contains(setuppedFormats, forma) {
-				r.Parent.Log(logger.Warn, "skipping track %d (%s)", n, forma.Codec())
+				r.Parent.Log(logger.Warn, "skipping track %d (%s)", n, formatlabel.FormatToLabel(forma))
 			}
 			n++
 		}

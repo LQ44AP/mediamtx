@@ -11,11 +11,13 @@ logLevel: info
 # Destinations of log messages; available values are "stdout", "file" and "syslog".
 logDestinations: [stdout]
 # When destination is "stdout" or "file", emit logs in structured format (JSONL).
-logStructured: no
+logStructured: false
 # When "file" is in logDestinations, this is the file which will receive logs.
 logFile: mediamtx.log
 # When "syslog" is in logDestinations, use prefix for logs.
 sysLogPrefix: mediamtx
+# Dump packets to disk. This is useful for debugging.
+dumpPackets: false
 
 # Timeout of read operations.
 readTimeout: 10s
@@ -41,18 +43,18 @@ udpReadBufferSize: 0
 # * RTSP_PORT: RTSP server port
 runOnConnect:
 # Restart the command if it exits.
-runOnConnectRestart: no
+runOnConnectRestart: false
 # Command to run when a client disconnects from the server.
-# Environment variables are the same of runOnConnect.
+# Environment variables are the same as runOnConnect.
 runOnDisconnect:
 
 ###############################################
 # Global settings -> Authentication
 
-# Authentication method. Available values are:
-# * internal: credentials are stored in the configuration file
-# * http: an external HTTP URL is contacted to perform authentication
-# * jwt: an external identity server provides authentication through JWTs
+# Authentication method. Available values:
+# * Internal database: credentials are stored in the configuration file
+# * External HTTP server: an external HTTP URL is contacted for each authentication request
+# * External JWT provider: credentials are signed tokens released by an external identity server
 authMethod: internal
 
 # Internal authentication.
@@ -121,7 +123,7 @@ authHTTPExclude:
 - action: pprof
 
 # JWT-based authentication.
-# Users have to login through an external identity server and obtain a JWT.
+# Users have to log in through an external identity server and obtain a JWT.
 # This JWT must contain the claim "mediamtx_permissions" with permissions,
 # for instance:
 # {
@@ -147,19 +149,20 @@ authJWTClaimKey: mediamtx_permissions
 # Actions to exclude from JWT-based authentication.
 # Format is the same as the one of user permissions.
 authJWTExclude: []
-# allow passing the JWT through query parameters of HTTP requests (i.e. ?jwt=JWT).
-# This is a security risk and will be disabled by default in the future.
-authJWTInHTTPQuery: true
+# Expected issuer (iss) claim in the JWT. Leave empty to skip validation.
+authJWTIssuer:
+# Expected audience (aud) claim in the JWT. Leave empty to skip validation.
+authJWTAudience:
 
 ###############################################
 # Global settings -> Control API
 
-# Enable controlling the server through the Control API.
-api: no
+# Allow clients to control the server through the Control API.
+api: false
 # Address of the Control API listener.
 apiAddress: :9997
 # Enable HTTPS on the Control API server.
-apiEncryption: no
+apiEncryption: false
 # Path to the server key. This is needed only when encryption is yes.
 # This can be generated with:
 # openssl genrsa -out server.key 2048
@@ -171,19 +174,19 @@ apiServerCert: server.crt
 # Supports wildcards: ['http://*.example.com']
 apiAllowOrigins: ['*']
 # IPs or CIDRs of proxies placed before the HTTP server.
-# If the server receives a request from one of these entries, IP in logs
-# will be taken from the X-Forwarded-For header.
+# These proxies can use the X-Forwarded-For header to set the real IP of clients,
+# and the X-Forwarded-Proto header to set the original protocol.
 apiTrustedProxies: []
 
 ###############################################
 # Global settings -> Metrics
 
-# Enable Prometheus-compatible metrics.
-metrics: no
+# Allow clients to extract Prometheus-compatible metrics.
+metrics: false
 # Address of the metrics HTTP listener.
 metricsAddress: :9998
 # Enable HTTPS on the Metrics server.
-metricsEncryption: no
+metricsEncryption: false
 # Path to the server key. This is needed only when encryption is yes.
 # This can be generated with:
 # openssl genrsa -out server.key 2048
@@ -195,19 +198,19 @@ metricsServerCert: server.crt
 # Supports wildcards: ['http://*.example.com']
 metricsAllowOrigins: ['*']
 # IPs or CIDRs of proxies placed before the HTTP server.
-# If the server receives a request from one of these entries, IP in logs
-# will be taken from the X-Forwarded-For header.
+# These proxies can use the X-Forwarded-For header to set the real IP of clients,
+# and the X-Forwarded-Proto header to set the original protocol.
 metricsTrustedProxies: []
 
 ###############################################
 # Global settings -> PPROF
 
-# Enable pprof-compatible endpoint to monitor performances.
-pprof: no
+# Allow clients to extract pprof-compatible performance reports.
+pprof: false
 # Address of the pprof listener.
 pprofAddress: :9999
 # Enable HTTPS on the pprof server.
-pprofEncryption: no
+pprofEncryption: false
 # Path to the server key. This is needed only when encryption is yes.
 # This can be generated with:
 # openssl genrsa -out server.key 2048
@@ -219,19 +222,19 @@ pprofServerCert: server.crt
 # Supports wildcards: ['http://*.example.com']
 pprofAllowOrigins: ['*']
 # IPs or CIDRs of proxies placed before the HTTP server.
-# If the server receives a request from one of these entries, IP in logs
-# will be taken from the X-Forwarded-For header.
+# These proxies can use the X-Forwarded-For header to set the real IP of clients,
+# and the X-Forwarded-Proto header to set the original protocol.
 pprofTrustedProxies: []
 
 ###############################################
 # Global settings -> Playback server
 
-# Enable downloading recordings from the playback server.
-playback: no
+# Allow clients to download recordings from the playback server.
+playback: false
 # Address of the playback server listener.
 playbackAddress: :9996
 # Enable HTTPS on the playback server.
-playbackEncryption: no
+playbackEncryption: false
 # Path to the server key. This is needed only when encryption is yes.
 # This can be generated with:
 # openssl genrsa -out server.key 2048
@@ -243,15 +246,15 @@ playbackServerCert: server.crt
 # Supports wildcards: ['http://*.example.com']
 playbackAllowOrigins: ['*']
 # IPs or CIDRs of proxies placed before the HTTP server.
-# If the server receives a request from one of these entries, IP in logs
-# will be taken from the X-Forwarded-For header.
+# These proxies can use the X-Forwarded-For header to set the real IP of clients,
+# and the X-Forwarded-Proto header to set the original protocol.
 playbackTrustedProxies: []
 
 ###############################################
 # Global settings -> RTSP server
 
-# Enable publishing and reading streams with the RTSP protocol.
-rtsp: yes
+# Allow clients to publish and read streams with the RTSP protocol.
+rtsp: true
 # Enabled RTSP transport protocols. The handshake is always performed with TCP.
 rtspTransports: [udp, multicast, tcp]
 # Use secure protocol variants (RTSPS, SRTP, SRTCP).
@@ -293,9 +296,9 @@ rtspAuthMethods: [basic]
 ###############################################
 # Global settings -> RTMP server
 
-# Enable publishing and reading streams with the RTMP protocol.
-rtmp: yes
-# Use the secure protocol variant (RTMP).
+# Allow clients to publish and read streams with the RTMP protocol.
+rtmp: true
+# Use the secure protocol variant (RTMPS).
 # Available values are "no", "strict", "optional".
 rtmpEncryption: "no"
 # Address of the RTMP listener. This is needed only when encryption is "no" or "optional".
@@ -313,13 +316,13 @@ rtmpServerCert: server.crt
 ###############################################
 # Global settings -> HLS server
 
-# Enable reading streams with the HLS protocol.
-hls: yes
+# Allow clients to read streams with the HLS protocol.
+hls: true
 # Address of the HLS listener.
 hlsAddress: :8888
 # Enable HTTPS on the HLS server.
 # This is required for Low-Latency HLS to function correctly on Apple devices.
-hlsEncryption: no
+hlsEncryption: false
 # Path to the server key. This is needed only when encryption is yes.
 # This can be generated with:
 # openssl genrsa -out server.key 2048
@@ -336,7 +339,7 @@ hlsAllowOrigins: ['*']
 hlsTrustedProxies: []
 # By default, HLS is generated only when requested by a user.
 # This option allows to generate it always, avoiding the delay between request and generation.
-hlsAlwaysRemux: no
+hlsAlwaysRemux: false
 # Variant of the HLS protocol to use. Available options are:
 # * mpegts - uses MPEG-TS segments, for maximum compatibility.
 # * fmp4 - uses fragmented MP4 segments, more efficient.
@@ -372,12 +375,14 @@ hlsMuxerCloseAfter: 60s
 ###############################################
 # Global settings -> WebRTC server
 
-# Enable publishing and reading streams with the WebRTC protocol.
-webrtc: yes
+# Allow clients to publish and read streams with the WebRTC protocol.
+webrtc: true
 # Address of the WebRTC HTTP listener.
 webrtcAddress: :8889
 # Enable HTTPS on the WebRTC server.
-webrtcEncryption: no
+# This covers only the WebRTC handshake and does not influence the encryption of WebRTC streams
+# which are always encrypted, with a key that is exchanged during the WebRTC handshake.
+webrtcEncryption: false
 # Path to the server key.
 # This can be generated with:
 # openssl genrsa -out server.key 2048
@@ -401,15 +406,15 @@ webrtcLocalUDPAddress: :8189
 webrtcLocalTCPAddress: ''
 # WebRTC clients need to know the IP of the server.
 # Gather IPs from interfaces and send them to clients.
-webrtcIPsFromInterfaces: yes
+webrtcIPsFromInterfaces: true
 # Interfaces whose IPs will be sent to clients.
 # An empty value means to use all available interfaces.
 webrtcIPsFromInterfacesList: []
 # Additional hosts or IPs to send to clients.
 webrtcAdditionalHosts: []
 # ICE servers. Needed only when local listeners can't be reached by clients.
-# STUN servers allows to obtain and share the public IP of the server.
-# TURN/TURNS servers forces all traffic through them.
+# STUN servers allow to obtain and share the public IP of the server.
+# TURN/TURNS servers force all traffic through them.
 webrtcICEServers2: []
   # - url: stun:stun.l.google.com:19302
   # if user is "AUTH_SECRET", then authentication is secret based.
@@ -417,18 +422,18 @@ webrtcICEServers2: []
   # username: ''
   # password: ''
   # clientOnly: false
+# Maximum time to gather STUN candidates.
+webrtcSTUNGatherTimeout: 5s
 # Time to wait for the WebRTC handshake to complete.
 webrtcHandshakeTimeout: 10s
-# Maximum time to gather video tracks.
+# Maximum time to gather tracks.
 webrtcTrackGatherTimeout: 2s
-# The maximum time to gather STUN candidates.
-webrtcSTUNGatherTimeout: 5s
 
 ###############################################
 # Global settings -> SRT server
 
-# Enable publishing and reading streams with the SRT protocol.
-srt: yes
+# Allow clients to publish and read streams with the SRT protocol.
+srt: true
 # Address of the SRT listener.
 srtAddress: :8890
 
@@ -457,10 +462,9 @@ pathDefaults:
   # * udp+mpegts://ip:port -> the stream is pulled from MPEG-TS over UDP, by listening on the specified address
   # * unix+mpegts://socket -> the stream is pulled from MPEG-TS over Unix socket, by using the socket
   # * udp+rtp://ip:port -> the stream is pulled from RTP over UDP, by listening on the specified address
-  # * unix+rtp://socket -> the stream is pulled from RTP over Unix socket, by using the socket
   # * srt://existing-url -> the stream is pulled from another SRT server / camera
-  # * whep://existing-url -> the stream is pulled from another WebRTC server / camera
-  # * wheps://existing-url -> the stream is pulled from another WebRTC server / camera with HTTPS
+  # * whep://existing-url -> the stream is pulled from another WebRTC server / camera with HTTP+WHEP
+  # * wheps://existing-url -> the stream is pulled from another WebRTC server / camera with HTTPS+WHEP
   # * redirect -> the stream is provided by another path or server
   # * rpiCamera -> the stream is provided by a Raspberry Pi Camera
   # The following variables can be used in the source string:
@@ -476,7 +480,7 @@ pathDefaults:
   sourceFingerprint:
   # If the source is a URL, it will be pulled only when at least
   # one reader is connected, saving bandwidth.
-  sourceOnDemand: no
+  sourceOnDemand: false
   # If sourceOnDemand is "yes", readers will be put on hold until the source is
   # ready or until this amount of time has passed.
   sourceOnDemandStartTimeout: 10s
@@ -493,25 +497,25 @@ pathDefaults:
   ###############################################
   # Default path settings -> Always available
 
-  # Enable always-available mode, in which a offline segment is played on repeat when the stream is not available.
+  # Enable always-available mode, in which an offline segment is played on repeat when the stream is not available.
   alwaysAvailable: false
+  # Tracks of the default offline segment.
+  alwaysAvailableTracks: []
+    # Available values are: AV1, VP9, H265, H264, Opus, MPEG4Audio, G711, LPCM
+    # - codec: H264
+    #   # in case of MPEG4Audio, G711, LPCM, sampleRate and ChannelCount must be provided too.
+    #   sampleRate: 48000
+    #   channelCount: 2
+    #   # in case of G711, muLaw must be provided too.
+    #   muLaw: false
   # An MP4 file can be used instead of the default offline segment.
   alwaysAvailableFile: ''
-  # Tracks of the offline segment.
-  alwaysAvailableTracks:
-    # Available values are: AV1, VP9, H265, H264, Opus, MPEG4Audio, G711, LPCM
-    - codec: H264
-      # in case of MPEG4Audio, G711, LPCM, sampleRate and ChannelCount must be provided too.
-      #  sampleRate: 48000
-      #  channelCount: 2
-      #  in case of G711, muLaw must be provided too.
-      #  muLaw: false
 
   ###############################################
   # Default path settings -> Record
 
   # Record streams to disk.
-  record: no
+  record: false
   # Path of recording segments.
   # Extension is added automatically.
   # Available variables are %path (path name), %Y %m %d (year, month, day),
@@ -537,9 +541,14 @@ pathDefaults:
   # Default path settings -> Publisher source (when source is "publisher")
 
   # Allow another client to disconnect the current publisher and publish in its place.
-  overridePublisher: yes
+  overridePublisher: true
   # SRT encryption passphrase required to publish to this path.
   srtPublishPassphrase:
+  # Demux MPEG-TS over RTSP into elementary streams.
+  # When enabled, RTSP publishers sending MP2T/90000 will be demultiplexed
+  # and their elementary streams (H.264, H.265, AAC, etc.) exposed as native tracks.
+  # This allows HLS, WebRTC, and other outputs to work transparently with MPEG-TS sources.
+  rtspDemuxMpegts: false
 
   ###############################################
   # Default path settings -> RTSP source (when source is a RTSP or a RTSPS URL)
@@ -548,7 +557,7 @@ pathDefaults:
   rtspTransport: automatic
   # Support sources that don't provide server ports or use random server ports. This is a security issue
   # and must be used only when interacting with sources that require it.
-  rtspAnyPort: no
+  rtspAnyPort: false
   # Range header to send to the source, in order to start streaming from the specified offset.
   # available values:
   # * clock: Absolute time
@@ -570,10 +579,22 @@ pathDefaults:
   rtpSDP:
 
   ###############################################
+  # Default path settings -> WebRTC / WHEP source (when source is WHEP)
+
+  # Token to insert in the Authorization: Bearer header.
+  whepBearerToken: ''
+  # Maximum time to gather STUN candidates.
+  whepSTUNGatherTimeout: 5s
+  # Time to wait for the WebRTC handshake to complete.
+  whepHandshakeTimeout: 10s
+  # Maximum time to gather tracks.
+  whepTrackGatherTimeout: 2s
+
+  ###############################################
   # Default path settings -> Redirect source (when source is "redirect")
 
-  # path which clients will be redirected to.
-  # It can be can be a relative path (i.e. /otherstream) or an absolute RTSP URL.
+  # Path to which clients will be redirected.
+  # It can be a relative path (i.e. /otherstream) or an absolute RTSP URL.
   sourceRedirect:
 
   ###############################################
@@ -683,7 +704,7 @@ pathDefaults:
   #   a regular expression.
   runOnInit:
   # Restart the command if it exits.
-  runOnInitRestart: no
+  runOnInitRestart: false
 
   # Command to run when this path is requested by a reader
   # and no one is publishing to this path yet.
@@ -697,7 +718,7 @@ pathDefaults:
   #   a regular expression.
   runOnDemand:
   # Restart the command if it exits.
-  runOnDemandRestart: no
+  runOnDemandRestart: false
   # Readers will be put on hold until the runOnDemand command starts publishing
   # or until this amount of time has passed.
   runOnDemandStartTimeout: 10s
@@ -705,7 +726,7 @@ pathDefaults:
   # readers connected and this amount of time has passed.
   runOnDemandCloseAfter: 10s
   # Command to run when there are no readers anymore.
-  # Environment variables are the same of runOnDemand.
+  # Environment variables are the same as runOnDemand.
   runOnUnDemand:
 
   # Command to run when the stream is ready to be read, whenever it is
@@ -721,9 +742,9 @@ pathDefaults:
   #   a regular expression.
   runOnReady:
   # Restart the command if it exits.
-  runOnReadyRestart: no
+  runOnReadyRestart: false
   # Command to run when the stream is not available anymore.
-  # Environment variables are the same of runOnReady.
+  # Environment variables are the same as runOnReady.
   runOnNotReady:
 
   # Command to run when a client starts reading.
@@ -738,9 +759,9 @@ pathDefaults:
   #   a regular expression.
   runOnRead:
   # Restart the command if it exits.
-  runOnReadRestart: no
+  runOnReadRestart: false
   # Command to run when a client stops reading.
-  # Environment variables are the same of runOnRead.
+  # Environment variables are the same as runOnRead.
   runOnUnread:
 
   # Command to run when a recording segment is created.

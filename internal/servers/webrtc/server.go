@@ -29,7 +29,6 @@ import (
 	"github.com/bluenviron/mediamtx/internal/logger"
 	"github.com/bluenviron/mediamtx/internal/protocols/webrtc"
 	"github.com/bluenviron/mediamtx/internal/restrictnetwork"
-	"github.com/bluenviron/mediamtx/internal/stream"
 )
 
 const (
@@ -175,9 +174,9 @@ type serverMetrics interface {
 }
 
 type serverPathManager interface {
-	FindPathConf(req defs.PathFindPathConfReq) (*conf.Path, error)
-	AddPublisher(req defs.PathAddPublisherReq) (defs.Path, *stream.SubStream, error)
-	AddReader(req defs.PathAddReaderReq) (defs.Path, *stream.Stream, error)
+	FindPathConf(req defs.PathFindPathConfReq) (*defs.PathFindPathConfRes, error)
+	AddPublisher(req defs.PathAddPublisherReq) (*defs.PathAddPublisherRes, error)
+	AddReader(req defs.PathAddReaderReq) (*defs.PathAddReaderRes, error)
 }
 
 type serverParent interface {
@@ -187,6 +186,7 @@ type serverParent interface {
 // Server is a WebRTC server.
 type Server struct {
 	Address               string
+	DumpPackets           bool
 	Encryption            bool
 	ServerKey             string
 	ServerCert            string
@@ -201,9 +201,9 @@ type Server struct {
 	IPsFromInterfacesList []string
 	AdditionalHosts       []string
 	ICEServers            []conf.WebRTCICEServer
+	STUNGatherTimeout     conf.Duration
 	HandshakeTimeout      conf.Duration
 	TrackGatherTimeout    conf.Duration
-	STUNGatherTimeout     conf.Duration
 	ExternalCmdPool       *externalcmd.Pool
 	Metrics               serverMetrics
 	PathManager           serverPathManager
@@ -251,6 +251,7 @@ func (s *Server) Initialize() error {
 
 	s.httpServer = &httpServer{
 		address:        s.Address,
+		dumpPackets:    s.DumpPackets,
 		encryption:     s.Encryption,
 		serverKey:      s.ServerKey,
 		serverCert:     s.ServerCert,
@@ -305,12 +306,17 @@ func (s *Server) Initialize() error {
 		}
 	}
 
-	str := "listener opened on " + s.Address + " (HTTP)"
+	str := "listener opened on " + s.Address
+	if !s.Encryption {
+		str += " (TCP/HTTP)"
+	} else {
+		str += " (TCP/HTTPS)"
+	}
 	if s.udpMuxLn != nil {
-		str += ", " + s.LocalUDPAddress + " (ICE/UDP)"
+		str += ", " + s.LocalUDPAddress + " (UDP/ICE)"
 	}
 	if s.tcpMuxLn != nil {
-		str += ", " + s.LocalTCPAddress + " (ICE/TCP)"
+		str += ", " + s.LocalTCPAddress + " (TCP/ICE)"
 	}
 	s.Log(logger.Info, str)
 
@@ -357,9 +363,9 @@ outer:
 				additionalHosts:       s.AdditionalHosts,
 				iceUDPMux:             s.iceUDPMux,
 				iceTCPMux:             s.iceTCPMux,
+				stunGatherTimeout:     s.STUNGatherTimeout,
 				handshakeTimeout:      s.HandshakeTimeout,
 				trackGatherTimeout:    s.TrackGatherTimeout,
-				stunGatherTimeout:     s.STUNGatherTimeout,
 				req:                   req,
 				wg:                    &wg,
 				externalCmdPool:       s.ExternalCmdPool,

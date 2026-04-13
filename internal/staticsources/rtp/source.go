@@ -15,6 +15,7 @@ import (
 	"github.com/bluenviron/mediamtx/internal/defs"
 	"github.com/bluenviron/mediamtx/internal/errordumper"
 	"github.com/bluenviron/mediamtx/internal/logger"
+	"github.com/bluenviron/mediamtx/internal/packetdumper"
 	"github.com/bluenviron/mediamtx/internal/protocols/udp"
 	"github.com/bluenviron/mediamtx/internal/protocols/unix"
 	"github.com/bluenviron/mediamtx/internal/stream"
@@ -30,6 +31,7 @@ type parent interface {
 
 // Source is a RTP static source.
 type Source struct {
+	DumpPackets       bool
 	ReadTimeout       conf.Duration
 	UDPReadBufferSize uint
 	Parent            parent
@@ -64,11 +66,17 @@ func (s *Source) Run(params defs.StaticSourceRunParams) error {
 	var nc net.Conn
 
 	switch u.Scheme {
-	case "unix+rtp":
-		nc, err = unix.CreateConn(u)
+	case "unix+rtp": // deprecated
+		params := unix.URLToParams(u)
+		l := &unix.Listener{
+			Path:   params.Path,
+			Listen: net.Listen,
+		}
+		err = l.Initialize()
 		if err != nil {
 			return err
 		}
+		nc = l
 
 	default:
 		udpReadBufferSize := s.UDPReadBufferSize
@@ -76,10 +84,25 @@ func (s *Source) Run(params defs.StaticSourceRunParams) error {
 			udpReadBufferSize = *params.Conf.RTPUDPReadBufferSize
 		}
 
-		nc, err = udp.CreateConn(u, int(udpReadBufferSize))
+		params := udp.URLToParams(u)
+		l := &udp.Listener{
+			Address:           params.Address,
+			Source:            params.Source,
+			IntfName:          params.IntfName,
+			UDPReadBufferSize: int(udpReadBufferSize),
+		}
+
+		if s.DumpPackets {
+			l.ListenPacket = (&packetdumper.ListenPacket{
+				Prefix: "rtp_source_packet_conn",
+			}).Do
+		}
+
+		err = l.Initialize()
 		if err != nil {
 			return err
 		}
+		nc = l
 	}
 
 	readerErr := make(chan error)
@@ -219,7 +242,7 @@ func (s *Source) runReader(desc *description.Session, nc net.Conn) error {
 // APISourceDescribe implements StaticSource.
 func (*Source) APISourceDescribe() *defs.APIPathSource {
 	return &defs.APIPathSource{
-		Type: "rtpSource",
+		Type: defs.APIPathSourceTypeRTPSource,
 		ID:   "",
 	}
 }
